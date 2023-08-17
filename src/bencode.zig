@@ -8,7 +8,7 @@ pub fn parse_bytes(raw_ben: []const u8, ally: std.mem.Allocator) !Value {
 }
 
 pub fn parse_reader(r: anytype, ally: std.mem.Allocator) !Value {
-    var pr: PeekableReader(@TypeOf(r)) = .{ .child_reader = r };
+    var pr: BencodeReader(@TypeOf(r)) = .{ .child_reader = r };
     return pr.parse_inner(ally);
 }
 
@@ -110,12 +110,12 @@ pub const Value = union(enum) {
     }
 };
 
-fn PeekableReader(comptime ReaderType: type) type {
+fn BencodeReader(comptime T: type) type {
     return struct {
-        child_reader: ReaderType,
+        child_reader: T,
         buf: ?u8 = null,
 
-        pub const Error = ReaderType.Error;
+        pub const Error = T.Error;
         pub const Reader = std.io.Reader(*Self, Error, read);
 
         const Self = @This();
@@ -129,11 +129,11 @@ fn PeekableReader(comptime ReaderType: type) type {
             return self.child_reader.read(dst);
         }
 
-        pub fn reader(self: *Self) Reader {
+        fn reader(self: *Self) Reader {
             return .{ .context = self };
         }
 
-        pub fn peek(self: *Self) !?u8 {
+        fn peek(self: *Self) !?u8 {
             if (self.buf == null) {
                 self.buf = self.child_reader.readByte() catch |err| switch (err) {
                     error.EndOfStream => return null,
@@ -193,20 +193,14 @@ fn PeekableReader(comptime ReaderType: type) type {
             }
 
             switch (try self.reader().readByte()) {
-                'i' => {
-                    return .{
-                        .Integer = try self.parse_integer(ally),
-                    };
+                'i' => return .{
+                    .Integer = try self.parse_integer(ally),
                 },
-                'l' => {
-                    return .{
-                        .List = try self.parse_list(ally),
-                    };
+                'l' => return .{
+                    .List = try self.parse_list(ally),
                 },
-                'd' => {
-                    return .{
-                        .Dictionary = try self.parse_dict(ally),
-                    };
+                'd' => return .{
+                    .Dictionary = try self.parse_dict(ally),
                 },
                 else => return error.BencodeBadDelimiter,
             }

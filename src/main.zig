@@ -10,5 +10,5 @@ pub fn main() !void {
     const ally = gpa.allocator();
 
     const torrent = try TorrentMeta.from_path("./assets/example.torrent", ally);
-    info("info: {?}", .{torrent.info});
+    info("hash: {b}", .{torrent.info_hash});
 }

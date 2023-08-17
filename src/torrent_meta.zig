@@ -18,7 +18,7 @@ pub const TorrentMeta = struct {
     comment: []const u8,
     created_by: []const u8,
     creation_date: i64,
-    info: InfoMeta,
+    info_hash: [20]u8,
     files: ?std.ArrayList(File),
 
     pub fn from_path(path: []const u8, ally: std.mem.Allocator) !TorrentMeta {
@@ -35,20 +35,24 @@ pub const TorrentMeta = struct {
     }
 
     fn serialize(v: bencode.Value, ally: std.mem.Allocator) !TorrentMeta {
-        _ = ally;
         const info = v.get_dict("info").?;
+        const hash = try hash_info(ally, info);
         return TorrentMeta{
             .announce = v.get_string("announce").?,
             .comment = v.get_string("comment").?,
             .created_by = v.get_string("created by").?,
             .creation_date = v.get_i64("creation date").?,
             .files = null, // TODO:
-            .info = InfoMeta{
-                .length = info.get_u64("length").?,
-                .name = info.get_string("name").?,
-                .piece_length = info.get_u64("piece length").?,
-                .pieces = info.get_string("pieces").?,
-            },
+            .info_hash = hash,
         };
+    }
+
+    fn hash_info(ally: std.mem.Allocator, v: bencode.Value) ![20]u8 {
+        var list = std.ArrayList(u8).init(ally);
+        defer list.deinit();
+        try v.encode(list.writer());
+        var hash: [20]u8 = undefined;
+        std.crypto.hash.Sha1.hash(list.items, hash[0..], std.crypto.hash.Sha1.Options{});
+        return hash;
     }
 };

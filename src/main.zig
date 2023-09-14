@@ -8,7 +8,10 @@ const TorrentMeta = @import("torrent_meta.zig").TorrentMeta;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const ally = gpa.allocator();
+    defer _ = gpa.deinit();
 
-    const torrent = try TorrentMeta.from_path("./assets/example.torrent", ally);
-    info("hash: {b}", .{torrent.info_hash});
+    var torrent = try TorrentMeta.fromPath("./assets/example.torrent", ally);
+    defer torrent.deinit(ally);
+
+    info("{any}", .{torrent});
 }

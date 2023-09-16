@@ -10,8 +10,8 @@ pub fn main() !void {
     const ally = gpa.allocator();
     defer _ = gpa.deinit();
 
-    var torrent = try TorrentMeta.fromPath("./assets/example.torrent", ally);
+    var torrent = try TorrentMeta.parse("./assets/example.torrent", ally);
     defer torrent.deinit(ally);
 
-    info("{any}", .{torrent});
+    info("{any}", .{torrent.hash});
 }

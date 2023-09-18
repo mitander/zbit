@@ -1,4 +1,5 @@
 const std = @import("std");
+const peer = @import("peer.zig");
 
 const debug = std.log.debug;
 const info = std.log.info;
@@ -16,7 +17,8 @@ pub fn main() !void {
     var torrent = try TorrentFile.parse(data, ally);
     defer torrent.deinit();
 
-    for (torrent.files.items) |f| {
-        info("{any}", .{f});
+    const peers = try peer.requestPeers(torrent.announce_urls.items, torrent.info_hash, torrent.total_len, ally);
+    for (peers) |p| {
+        p.deinit();
     }
 }

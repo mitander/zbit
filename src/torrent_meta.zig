@@ -99,20 +99,25 @@ pub const TorrentMeta = struct {
     }
 };
 
+const testing = std.testing;
+const expectEqual = testing.expectEqual;
+const expectEqualStrings = testing.expectEqualStrings;
+
 test "parse torrent file" {
-    const data = try std.fs.cwd().readFileAlloc(std.testing.allocator, "./deps/zencode/assets/example.torrent", 100_000);
+    const data = try std.fs.cwd().readFileAlloc(testing.allocator, "./deps/zencode/assets/example.torrent", 100_000);
     defer std.testing.allocator.free(data);
 
-    var torrent = try TorrentMeta.parse(data, std.testing.allocator);
-    defer torrent.deinit(std.testing.allocator);
+    var torrent = try TorrentMeta.parse(data, testing.allocator);
+    defer torrent.deinit(testing.allocator);
     const hash_len = 20;
+    const piece_len = torrent.info.pieces.len / hash_len;
 
-    std.debug.assert(std.mem.eql(u8, torrent.announce, "http://bttracker.debian.org:6969/announce"));
-    std.debug.assert(torrent.hash.info.len == hash_len);
-    std.debug.assert(torrent.hash.pieces.len == torrent.info.pieces.len / hash_len);
-    std.debug.assert(torrent.info.piece_len == 262_144);
-    std.debug.assert(torrent.info.pieces.len == 50_000);
-    std.debug.assert(std.mem.eql(u8, torrent.info.name, "debian-mac-12.1.0-amd64-netinst.iso"));
-    std.debug.assert(torrent.info.files.items.len == 1);
-    std.debug.assert(std.mem.eql(u8, torrent.info.files.items[0].path, torrent.info.name));
+    try expectEqualStrings("http://bttracker.debian.org:6969/announce", torrent.announce);
+    try expectEqual(hash_len, torrent.hash.info.len);
+    try expectEqual(piece_len, torrent.hash.pieces.len);
+    try expectEqual(@as(i64, 262_144), torrent.info.piece_len);
+    try expectEqual(@as(usize, 50_000), torrent.info.pieces.len);
+    try expectEqualStrings("debian-mac-12.1.0-amd64-netinst.iso", torrent.info.name);
+    try expectEqual(@as(usize, 1), torrent.info.files.items.len);
+    try expectEqualStrings(torrent.info.name, torrent.info.files.items[0].path);
 }

@@ -3,7 +3,7 @@ const std = @import("std");
 const debug = std.log.debug;
 const info = std.log.info;
 
-const TorrentMeta = @import("torrent_meta.zig").TorrentMeta;
+const TorrentFile = @import("torrent_file.zig").TorrentFile;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -13,8 +13,10 @@ pub fn main() !void {
     const data = try std.fs.cwd().readFileAlloc(ally, "./assets/example.torrent", 60_000);
     defer ally.free(data);
 
-    var torrent = try TorrentMeta.parse(data, ally);
-    defer torrent.deinit(ally);
+    var torrent = try TorrentFile.parse(data, ally);
+    defer torrent.deinit();
 
-    info("{s}", .{torrent.info.name});
+    for (torrent.files.items) |f| {
+        info("{any}", .{f});
+    }
 }

@@ -1,6 +1,8 @@
 const std = @import("std");
-const peer = @import("peer.zig");
+const log = std.log.scoped(.main);
+
 const TorrentFile = @import("torrent_file.zig").TorrentFile;
+const TrackerManager = @import("tracker.zig").TrackerManager;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -11,11 +13,9 @@ pub fn main() !void {
     defer ally.free(data);
 
     var torrent = try TorrentFile.init(data, ally);
-    std.log.debug("{any}", .{torrent});
     defer torrent.deinit();
+    log.debug("torrent '{s}' parsed with {d} file(s)", .{ torrent.files.items[0].path, torrent.files.items.len });
 
-    const peers = try peer.requestPeers(torrent.announce_urls.items, torrent.info_hash, torrent.total_len, ally);
-    for (peers) |p| {
-        p.deinit();
-    }
+    const tracker_manager = try TrackerManager.init(torrent.announce_urls.items, torrent.info_hash, torrent.total_len, ally);
+    defer tracker_manager.deinit();
 }

@@ -15,55 +15,50 @@ pub const TorrentFile = struct {
     piece_len: usize,
     total_len: usize,
     files: std.ArrayList(File),
-    ally: std.mem.Allocator,
+    arena: std.heap.ArenaAllocator,
 
     const Self = @This();
 
-    pub fn init(bencode: []const u8, ally: std.mem.Allocator) !TorrentFile {
-        const v = try zencode.parse(bencode, ally);
-        defer v.deinit();
+    pub fn init(bencode: []const u8, allocator: std.mem.Allocator) !TorrentFile {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        errdefer arena.deinit();
+        const ally = arena.allocator();
+
+        const tree = try zencode.parse(bencode, ally);
+        defer tree.deinit();
         zencode.MapLookupError = error.InvalidBencode;
 
         var announce_urls = std.ArrayList([]const u8).init(ally);
-        errdefer announce_urls.deinit();
-
-        errdefer for (announce_urls.items) |val| ally.free(val);
-        if (zencode.mapLookupOptional(v.root.Map, "announce", .String)) |announce| {
-            const owned_announce = try ally.dupe(u8, announce);
-            try announce_urls.append(owned_announce);
+        if (zencode.mapLookupOptional(tree.root.Map, "announce", .String)) |announce| {
+            try announce_urls.append(announce);
         }
-        if (zencode.mapLookupOptional(v.root.Map, "announce-list", .List)) |url_list| {
-            for (url_list.items) |announce| {
-                const owned_announce = try ally.dupe(u8, announce.String);
-                try announce_urls.append(owned_announce);
+        if (zencode.mapLookupOptional(tree.root.Map, "announce-list", .List)) |announce_list| {
+            for (announce_list.items) |announce| {
+                try announce_urls.append(announce.String);
             }
         }
 
-        const info = try zencode.mapLookup(v.root.Map, "info", .Map);
+        const info = try zencode.mapLookup(tree.root.Map, "info", .Map);
         const name = try zencode.mapLookup(info, "name", .String);
         const pieces = try zencode.mapLookup(info, "pieces", .String);
         const piece_len: usize = @intCast(try zencode.mapLookup(info, "piece length", .Integer));
         var total_len: usize = @intCast(try zencode.mapLookup(info, "length", .Integer));
 
         var files = std.ArrayList(File).init(ally);
-        errdefer files.deinit();
-        const owned_name = try ally.dupe(u8, name);
-        errdefer ally.free(owned_name);
-        try files.append(.{ .path = owned_name, .length = total_len });
+        try files.append(.{ .path = name, .length = total_len });
 
         if (zencode.mapLookupOptional(info, "files", .List)) |list| for (list.items) |file| {
             const length: usize = @intCast(try zencode.mapLookup(file.Map, "length", .Integer));
-            const owned_path = try ally.dupe(u8, try zencode.mapLookup(file.Map, "path", .String));
-            errdefer ally.free(owned_path);
-            try files.append(.{ .path = owned_name, .length = length });
+            const path = try zencode.mapLookup(file.Map, "path", .String);
+            try files.append(.{ .path = path, .length = length });
             total_len += length;
         };
 
         const hash_len = 20;
         const num_hashes = pieces.len / hash_len;
         if (pieces.len % hash_len != 0) return error.InvalidHash;
+
         var piece_hashes = try ally.alloc([20]u8, num_hashes);
-        errdefer ally.free(piece_hashes);
         for (0..num_hashes) |i| {
             const begin = i * hash_len;
             const end = (i + 1) * hash_len;
@@ -77,28 +72,20 @@ pub const TorrentFile = struct {
         var info_hash: [20]u8 = undefined;
         std.crypto.hash.Sha1.hash(info_bencoded.items, info_hash[0..], std.crypto.hash.Sha1.Options{});
 
-        const owned_pieces = try ally.dupe(u8, pieces);
-        errdefer ally.free(owned_pieces);
-
         return TorrentFile{
             .announce_urls = announce_urls,
             .info_hash = info_hash,
-            .pieces = owned_pieces,
+            .pieces = pieces,
             .piece_hashes = piece_hashes,
             .piece_len = piece_len,
             .total_len = total_len,
             .files = files,
-            .ally = ally,
+            .arena = arena,
         };
     }
 
     pub fn deinit(self: Self) void {
-        self.ally.free(self.piece_hashes);
-        self.ally.free(self.pieces);
-        for (self.files.items) |file| self.ally.free(file.path);
-        self.files.deinit();
-        for (self.announce_urls.items) |url| self.ally.free(url);
-        self.announce_urls.deinit();
+        self.arena.deinit();
     }
 };
 
@@ -125,6 +112,7 @@ test "create torrent file" {
 test "create torrent with multiple files" {
     var torrent = try TorrentFile.init("d8:announce14:http://foo.com4:infod6:lengthi20e12:piece lengthi20e6:pieces20:0123456789012345678904:name11:example.iso5:filesld6:lengthi40e4:path8:test.txteeee", testing.allocator);
     defer torrent.deinit();
+
     try testing.expectEqual(@as(usize, 20), torrent.files.items[0].length);
     try testing.expectEqualStrings("example.iso", torrent.files.items[0].path);
     try testing.expectEqual(@as(usize, 40), torrent.files.items[1].length);

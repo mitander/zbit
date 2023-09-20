@@ -2,6 +2,8 @@ const std = @import("std");
 const log = std.log.scoped(.tracker);
 const zencode = @import("zencode");
 
+const MetaInfo = @import("metainfo.zig").MetaInfo;
+
 pub const Peer = struct {
     address: std.net.Address,
     recv_buffer: std.ArrayList(u8),
@@ -60,7 +62,7 @@ pub const Tracker = struct {
                 const port = std.mem.readIntBig(u16, &peer_port);
                 const address = std.net.Address.initIp4(ip, port);
                 const peer = Peer.init(address, ally);
-                if (isUnique(peers.items, peer)) try peers.append(peer);
+                try addUniquePeer(&peers, peer);
             }
         } else {
             const peers_list = try zencode.mapLookup(tree.root.Map, "peers", .List);
@@ -70,17 +72,20 @@ pub const Tracker = struct {
                 const casted_port: u16 = @intCast(port);
                 const address = try std.net.Address.parseIp(ip, casted_port);
                 const peer = Peer.init(address, ally);
-                if (isUnique(peers.items, peer)) try peers.append(peer);
+                try addUniquePeer(&peers, peer);
             }
         }
         return try peers.toOwnedSlice();
     }
 
-    fn isUnique(peers: []Peer, peer: Peer) bool {
-        for (peers) |p| if (p.address.eql(peer.address)) {
-            return false;
-        };
-        return true;
+    fn addUniquePeer(peers: *std.ArrayList(Peer), peer: Peer) !void {
+        for (peers.items) |p| {
+            if (p.address.eql(peer.address)) {
+                return;
+            }
+        }
+        log.debug("added peer: {any}", .{peer.address});
+        try peers.append(peer);
     }
 
     fn sendRequest(self: Self, allocator: std.mem.Allocator) ![]const u8 {
@@ -93,6 +98,7 @@ pub const Tracker = struct {
         var request = try client.request(.GET, self.uri, headers, .{});
         try request.start();
         try request.wait();
+
         return try request.reader().readAllAlloc(allocator, 8192);
     }
 };
@@ -104,15 +110,15 @@ pub const TrackerManager = struct {
 
     const Self = @This();
 
-    pub fn init(announce_urls: [][]const u8, info_hash: [20]u8, total_len: usize, allocator: std.mem.Allocator) !TrackerManager {
+    pub fn init(metainfo: MetaInfo, peer_id: [20]u8, allocator: std.mem.Allocator) !TrackerManager {
         var arena = std.heap.ArenaAllocator.init(allocator);
         var ally = arena.allocator();
         errdefer arena.deinit();
 
         var trackers = std.ArrayList(Tracker).init(ally);
         var tracker_peers = std.ArrayList(Peer).init(ally);
-        for (announce_urls) |url| {
-            const uri = parseUri(url, info_hash, total_len, ally) catch {
+        for (metainfo.announce_urls.items) |url| {
+            const uri = parseUri(url, peer_id, metainfo.info_hash, metainfo.total_len, ally) catch {
                 log.warn("skipping tracker '{s}': missing 'http' or 'https' schema", .{url});
                 continue;
             };
@@ -135,22 +141,17 @@ pub const TrackerManager = struct {
     }
 };
 
-fn parseUri(url: []const u8, info_hash: [20]u8, total_len: usize, allocator: std.mem.Allocator) !std.Uri {
-    var rand_buf: [12]u8 = undefined;
-    std.crypto.random.bytes(&rand_buf);
-
-    const peer_id = std.fmt.allocPrint(allocator, "-ZB0100-{s}", .{rand_buf}) catch unreachable;
-    const escaped_hash = std.Uri.escapeString(allocator, info_hash[0..]) catch unreachable;
+fn parseUri(url: []const u8, peer_id: [20]u8, info_hash: [20]u8, total_len: usize, allocator: std.mem.Allocator) !std.Uri {
+    const escaped_hash = std.Uri.escapeString(allocator, &info_hash) catch unreachable;
     const request_fmt = "{s}?info_hash={s}&peer_id={s}&left={d}&port={d}&downloaded=0&uploaded=0&compact=0";
     const tracker_port = 6889;
 
     const req = std.fmt.allocPrint(allocator, request_fmt, .{
         url,
         escaped_hash,
-        peer_id[0..],
+        peer_id,
         total_len,
         tracker_port,
     }) catch unreachable;
-
     return try std.Uri.parse(req);
 }

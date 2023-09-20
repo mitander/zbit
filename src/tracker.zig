@@ -1,8 +1,6 @@
 const std = @import("std");
 const log = std.log.scoped(.tracker);
-
 const zencode = @import("zencode");
-const TorrentFile = @import("torrent_file.zig").TorrentFile;
 
 pub const Peer = struct {
     address: std.net.Address,

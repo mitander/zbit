@@ -1,7 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.main);
 
-const TorrentFile = @import("torrent_file.zig").TorrentFile;
+const MetaInfo = @import("metainfo.zig").MetaInfo;
 const TrackerManager = @import("tracker.zig").TrackerManager;
 
 pub fn main() !void {
@@ -12,10 +12,14 @@ pub fn main() !void {
     const data = try std.fs.cwd().readFileAlloc(ally, "./assets/example.torrent", 60_000);
     defer ally.free(data);
 
-    var torrent = try TorrentFile.init(data, ally);
-    defer torrent.deinit();
-    log.debug("torrent '{s}' parsed with {d} file(s)", .{ torrent.files.items[0].path, torrent.files.items.len });
+    const info = try MetaInfo.init(data, ally);
+    defer info.deinit();
 
-    const tracker_manager = try TrackerManager.init(torrent.announce_urls.items, torrent.info_hash, torrent.total_len, ally);
+    const tracker_manager = try TrackerManager.init(
+        info.announce_urls.items,
+        info.info_hash,
+        info.total_len,
+        ally,
+    );
     defer tracker_manager.deinit();
 }

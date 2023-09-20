@@ -1,13 +1,14 @@
 const std = @import("std");
 const zencode = @import("zencode");
-const log = std.log.scoped(.torrent_file);
+const log = std.log.scoped(.metainfo);
 
 const File = struct {
     path: []const u8,
     length: usize,
 };
 
-pub const TorrentFile = struct {
+pub const MetaInfo = struct {
+    name: []const u8,
     announce_urls: std.ArrayList([]const u8),
     info_hash: [20]u8,
     pieces: []const u8,
@@ -19,10 +20,10 @@ pub const TorrentFile = struct {
 
     const Self = @This();
 
-    pub fn init(bencode: []const u8, allocator: std.mem.Allocator) !TorrentFile {
+    pub fn init(bencode: []const u8, allocator: std.mem.Allocator) !MetaInfo {
         var arena = std.heap.ArenaAllocator.init(allocator);
+        var ally = arena.allocator();
         errdefer arena.deinit();
-        const ally = arena.allocator();
 
         const tree = try zencode.parse(bencode, ally);
         defer tree.deinit();
@@ -72,7 +73,8 @@ pub const TorrentFile = struct {
         var info_hash: [20]u8 = undefined;
         std.crypto.hash.Sha1.hash(info_bencoded.items, info_hash[0..], std.crypto.hash.Sha1.Options{});
 
-        return TorrentFile{
+        return MetaInfo{
+            .name = name,
             .announce_urls = announce_urls,
             .info_hash = info_hash,
             .pieces = pieces,
@@ -91,30 +93,30 @@ pub const TorrentFile = struct {
 
 const testing = std.testing;
 
-test "create torrent file" {
+test "create metainfo" {
     const data = try std.fs.cwd().readFileAlloc(testing.allocator, "./assets/example.torrent", 100_000);
     defer testing.allocator.free(data);
-    var torrent = try TorrentFile.init(data, testing.allocator);
-    defer torrent.deinit();
+    var info = try MetaInfo.init(data, testing.allocator);
+    defer info.deinit();
 
     const hash_len = 20;
-    const piece_len = torrent.pieces.len / hash_len;
+    const piece_len = info.pieces.len / hash_len;
 
-    try testing.expectEqual(hash_len, torrent.info_hash.len);
-    try testing.expectEqual(piece_len, torrent.piece_hashes.len);
-    try testing.expectEqual(@as(usize, 262_144), torrent.piece_len);
-    try testing.expectEqual(@as(usize, 50_000), torrent.pieces.len);
-    try testing.expectEqual(@as(usize, 1), torrent.files.items.len);
-    try testing.expectEqualStrings("debian-mac-12.1.0-amd64-netinst.iso", torrent.files.items[0].path);
-    try testing.expectEqualStrings("http://bttracker.debian.org:6969/announce", torrent.announce_urls.items[0]);
+    try testing.expectEqual(hash_len, info.info_hash.len);
+    try testing.expectEqual(piece_len, info.piece_hashes.len);
+    try testing.expectEqual(@as(usize, 262_144), info.piece_len);
+    try testing.expectEqual(@as(usize, 50_000), info.pieces.len);
+    try testing.expectEqual(@as(usize, 1), info.files.items.len);
+    try testing.expectEqualStrings("debian-mac-12.1.0-amd64-netinst.iso", info.files.items[0].path);
+    try testing.expectEqualStrings("http://bttracker.debian.org:6969/announce", info.announce_urls.items[0]);
 }
 
-test "create torrent with multiple files" {
-    var torrent = try TorrentFile.init("d8:announce14:http://foo.com4:infod6:lengthi20e12:piece lengthi20e6:pieces20:0123456789012345678904:name11:example.iso5:filesld6:lengthi40e4:path8:test.txteeee", testing.allocator);
-    defer torrent.deinit();
+test "create metainfo with multiple files" {
+    var info = try MetaInfo.init("d8:announce14:http://foo.com4:infod6:lengthi20e12:piece lengthi20e6:pieces20:0123456789012345678904:name11:example.iso5:filesld6:lengthi40e4:path8:test.txteeee", testing.allocator);
+    defer info.deinit();
 
-    try testing.expectEqual(@as(usize, 20), torrent.files.items[0].length);
-    try testing.expectEqualStrings("example.iso", torrent.files.items[0].path);
-    try testing.expectEqual(@as(usize, 40), torrent.files.items[1].length);
-    try testing.expectEqualStrings("test.txt", torrent.files.items[1].path);
+    try testing.expectEqual(@as(usize, 20), info.files.items[0].length);
+    try testing.expectEqualStrings("example.iso", info.files.items[0].path);
+    try testing.expectEqual(@as(usize, 40), info.files.items[1].length);
+    try testing.expectEqualStrings("test.txt", info.files.items[1].path);
 }

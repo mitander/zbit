@@ -95,11 +95,17 @@ pub const Tracker = struct {
 
         var client = std.http.Client{ .allocator = ally };
         var headers = std.http.Headers{ .allocator = ally };
-        var request = try client.request(.GET, self.uri, headers, .{});
-        try request.start();
-        try request.wait();
-
-        return try request.reader().readAllAlloc(allocator, 8192);
+        for (0..20) |retry| {
+            var request = try client.request(.GET, self.uri, headers, .{});
+            try request.start();
+            request.wait() catch {
+                std.time.sleep(10 * std.time.ns_per_s);
+                log.debug("peer request failed: retry {d} of 20", .{retry});
+                continue;
+            };
+            return try request.reader().readAllAlloc(allocator, 8192);
+        }
+        return error.TrackerRequestFailure;
     }
 };
 

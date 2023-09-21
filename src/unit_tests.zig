@@ -1,4 +1,4 @@
 test {
-    _ = @import("torrent_file.zig");
+    _ = @import("metainfo.zig");
     _ = @import("tracker.zig");
 }

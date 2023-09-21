@@ -121,10 +121,10 @@ test "create metainfo" {
 }
 
 test "create metainfo with multiple files" {
-    var info = try MetaInfo.init("d8:announce14:http://foo.com4:infod6:lengthi20e12:piece lengthi20e6:pieces20:0123456789012345678904:name11:example.iso5:filesld6:lengthi40e4:path8:test.txteeee", testing.allocator);
+    var info = try MetaInfo.init("d8:announce14:http://foo.com4:infod12:piece lengthi20e6:pieces20:0123456789012345678904:name11:example.iso5:filesld6:lengthi40e4:pathl8:test.txteeeee", testing.allocator);
     defer info.deinit();
 
-    try testing.expectEqual(@as(usize, 20), info.files.items[0].length);
+    try testing.expectEqual(@as(usize, 0), info.files.items[0].length); // root folder
     try testing.expectEqualStrings("example.iso", info.files.items[0].path);
     try testing.expectEqual(@as(usize, 40), info.files.items[1].length);
     try testing.expectEqualStrings("test.txt", info.files.items[1].path);

@@ -125,7 +125,7 @@ pub const TrackerManager = struct {
         var tracker_peers = std.ArrayList(Peer).init(ally);
         for (metainfo.announce_urls.items) |url| {
             const uri = parseUri(url, peer_id, metainfo.info_hash, metainfo.total_len, ally) catch {
-                log.warn("skipping tracker '{s}': missing 'http' or 'https' schema", .{url});
+                log.info("skipping tracker with non-supported schema: '{s}'", .{url});
                 continue;
             };
             const tracker = Tracker.init(uri, ally);
@@ -159,5 +159,11 @@ fn parseUri(url: []const u8, peer_id: [20]u8, info_hash: [20]u8, total_len: usiz
         total_len,
         tracker_port,
     }) catch unreachable;
-    return try std.Uri.parse(req);
+
+    const uri = try std.Uri.parse(req);
+    if (!std.mem.eql(u8, uri.scheme, "http") and !std.mem.eql(u8, uri.scheme, "https")) {
+        // TODO: impl udp support
+        return error.UnsupportedUriSchema;
+    }
+    return uri;
 }

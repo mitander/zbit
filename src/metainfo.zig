@@ -30,15 +30,15 @@ pub const MetaInfo = struct {
         zencode.MapLookupError = error.InvalidBencode;
 
         var announce_urls = std.ArrayList([]const u8).init(ally);
-        if (zencode.mapLookupOptional(tree.root.Map, "announce", .String)) |announce| {
-            try announce_urls.append(announce);
-        }
         if (zencode.mapLookupOptional(tree.root.Map, "announce-list", .List)) |announce_list| {
             for (announce_list.items) |announce| {
                 for (announce.List.items) |item| {
                     try announce_urls.append(item.String);
                 }
             }
+        } else {
+            const announce = try zencode.mapLookup(tree.root.Map, "announce", .String);
+            try announce_urls.append(announce);
         }
 
         const info = try zencode.mapLookup(tree.root.Map, "info", .Map);

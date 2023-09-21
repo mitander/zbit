@@ -35,7 +35,9 @@ pub const MetaInfo = struct {
         }
         if (zencode.mapLookupOptional(tree.root.Map, "announce-list", .List)) |announce_list| {
             for (announce_list.items) |announce| {
-                try announce_urls.append(announce.String);
+                for (announce.List.items) |item| {
+                    try announce_urls.append(item.String);
+                }
             }
         }
 
@@ -43,17 +45,24 @@ pub const MetaInfo = struct {
         const name = try zencode.mapLookup(info, "name", .String);
         const pieces = try zencode.mapLookup(info, "pieces", .String);
         const piece_len: usize = @intCast(try zencode.mapLookup(info, "piece length", .Integer));
-        var total_len: usize = @intCast(try zencode.mapLookup(info, "length", .Integer));
 
+        var total_len: usize = 0;
         var files = std.ArrayList(File).init(ally);
-        try files.append(.{ .path = name, .length = total_len });
+        try files.append(.{ .path = name, .length = total_len }); // root folder
 
-        if (zencode.mapLookupOptional(info, "files", .List)) |list| for (list.items) |file| {
-            const length: usize = @intCast(try zencode.mapLookup(file.Map, "length", .Integer));
-            const path = try zencode.mapLookup(file.Map, "path", .String);
-            try files.append(.{ .path = path, .length = length });
+        if (zencode.mapLookupOptional(info, "files", .List)) |list| {
+            for (list.items) |file| {
+                const length: usize = @intCast(try zencode.mapLookup(file.Map, "length", .Integer));
+                const path_list = try zencode.mapLookup(file.Map, "path", .List);
+                for (path_list.items) |path| {
+                    try files.append(.{ .path = path.String, .length = length });
+                    total_len += length;
+                }
+            }
+        } else {
+            const length: usize = @intCast(try zencode.mapLookup(info, "length", .Integer));
             total_len += length;
-        };
+        }
 
         const hash_len = 20;
         const num_hashes = pieces.len / hash_len;

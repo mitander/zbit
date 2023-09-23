@@ -1,3 +1,0 @@
-[submodule "deps/zencode"]
-	path = deps/zencode
-	url = https://github.com/mitander/zencode

@@ -15,6 +15,12 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const zbit_optimize = b.option(
+        std.builtin.OptimizeMode,
+        "zencode-optimize",
+        "Prioritize performance, safety, or binary size (-O flag), defaults to value of optimize option",
+    ) orelse optimize;
+
     const exe = b.addExecutable(.{
         .name = "zbit",
         // In this case the main source file is merely a path, however, in more
@@ -24,11 +30,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const zencode = b.addModule("zencode", .{
-        .source_file = std.Build.FileSource.relative("deps/zencode/src/zencode.zig"),
+    const zencode_dep = b.dependency("zencode", .{
+        .target = target,
+        .optimize = zbit_optimize,
     });
-
-    exe.addModule("zencode", zencode);
+    exe.linkLibrary(zencode_dep.artifact("zencode"));
+    exe.addModule("zencode", zencode_dep.module("zencode"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -65,8 +72,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
-    unit_tests.addModule("zencode", zencode);
+    unit_tests.addModule("zencode", zencode_dep.module("zencode"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

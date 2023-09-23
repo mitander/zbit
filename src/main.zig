@@ -2,7 +2,7 @@ const std = @import("std");
 const log = std.log.scoped(.main);
 
 const MetaInfo = @import("metainfo.zig").MetaInfo;
-const Torrent = @import("torrent.zig").Torrent;
+const Client = @import("client.zig").Client;
 
 const example_file = "./assets/example.torrent";
 pub fn main() !void {
@@ -16,6 +16,11 @@ pub fn main() !void {
     const info = try MetaInfo.init(data, ally);
     defer info.deinit();
 
-    const torrent = try Torrent.init(info, ally);
-    defer torrent.deinit();
+    const client = try Client.init(info, ally);
+    defer client.deinit();
+
+    for (client.tracker_manager.peers.items) |peer| {
+        _ = peer;
+        // peer.socket = try peer.connect();
+    }
 }

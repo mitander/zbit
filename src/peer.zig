@@ -1,6 +1,7 @@
 const std = @import("std");
 const log = std.log.scoped(.peer);
 
+const MetaInfo = @import("metainfo.zig").MetaInfo;
 const Tracker = @import("tracker.zig").Tracker;
 
 const HANDSHAKE_FMT = "19" ++ "BitTorrent protocol" ++ ("\x00" ** 8) ++ "{:20}{:20}";
@@ -36,20 +37,25 @@ pub const Message = union(enum) {
 
 pub const Peer = struct {
     address: std.net.Address,
-    socket: std.net.Stream,
+    socket: std.os.socket_t,
     buffer: std.ArrayList(u8),
     tracker: Tracker,
     state: State,
+    connected: bool,
     ally: std.mem.Allocator,
 
     const Self = @This();
-    pub fn init(address: std.net.Address, allocator: std.mem.Allocator, tracker: Tracker) !Peer {
+    pub fn init(allocator: std.mem.Allocator, address: std.net.Address, tracker: Tracker) !Peer {
+        const sock_flags = std.os.SOCK.STREAM | std.os.SOCK.CLOEXEC;
+        const socket = try std.os.socket(address.any.family, sock_flags, std.os.IPPROTO.TCP);
+        errdefer std.os.closeSocket(socket);
         return Peer{
             .address = address,
-            .socket = try connect(address),
+            .socket = socket,
             .buffer = std.ArrayList(u8).init(allocator),
             .tracker = tracker,
             .state = State.Choking,
+            .connected = false,
             .ally = allocator,
         };
     }
@@ -59,27 +65,64 @@ pub const Peer = struct {
         self.buffer.deinit();
     }
 
-    pub fn connect(address: std.net.Address) !std.net.Stream {
-        log.info("connecting to peer '{any}'", .{address});
-        var socket: std.net.Stream = undefined;
-        for (0..20) |retry| {
-            socket = std.net.tcpConnectToAddress(address) catch |err| {
+    pub fn download(self: Self, metainfo: MetaInfo, peer_id: [20]u8) !void {
+        try self.connect();
+        try self.sendHandshake(metainfo, peer_id);
+        try self.sendInterested();
+        try self.sendChoke();
+    }
+
+    fn connect(self: Self) !void {
+        log.debug("connecting to peer '{any}", .{self.address});
+        for (0..2) |retry| {
+            std.os.connect(self.socket, &self.address.any, self.address.getOsSockLen()) catch |err| {
                 switch (err) {
                     error.ConnectionTimedOut, error.ConnectionRefused => {
-                        std.log.err("connection failed to '{any}': '{}'", .{ address, err });
-                        if (retry < 20) {
-                            std.time.sleep(500 * std.time.ms_per_s);
-                            log.warn("failed to connect: retry {d} of 20", .{retry});
-                            continue;
-                        }
-                        return err;
+                        log.warn("connection failed to '{any}', retry {d} of 2", .{
+                            self.address,
+                            retry + 1,
+                        });
+                        std.time.sleep(200 * std.time.ms_per_s);
+                        continue;
                     },
                     else => return err,
                 }
             };
+            log.debug("connected to peer '{any}", .{self.address});
             break;
         }
-        log.info("connected to peer '{any}'", .{address});
-        return socket;
+    }
+
+    fn sendHandshake(self: Self, metainfo: MetaInfo, peer_id: [20]u8) !void {
+        const handshake_payload = "\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00";
+        _ = try std.os.sendto(self.socket, handshake_payload, 0, @ptrCast(&self.address.any), self.address.any.len);
+        _ = try std.os.sendto(self.socket, metainfo.info_hash[0..], 0, @ptrCast(&self.address.any), self.address.any.len);
+        _ = try std.os.sendto(self.socket, peer_id[0..], 0, @ptrCast(&self.address.any), self.address.any.len);
+
+        while (true) {
+            var buf: [68]u8 = undefined;
+            const len = try std.os.read(self.socket, &buf);
+            if (len == 68) {
+                break;
+            }
+            log.warn("invalid handshake read: '{d}'", .{len});
+        }
+        log.debug("handshaked '{any}'", .{self.address});
+    }
+
+    fn sendInterested(self: Self) !void {
+        var msg: [5]u8 = undefined;
+        std.mem.writeIntBig(u32, msg[0..4], 1);
+        std.mem.writeIntBig(u8, &msg[4], 3);
+        _ = try std.os.sendto(self.socket, &msg, 0, @ptrCast(&self.address.any), self.address.any.len);
+        log.debug("interested: '{any}'", .{self.address});
+    }
+
+    fn sendChoke(self: Self) !void {
+        var msg: [5]u8 = undefined;
+        std.mem.writeIntBig(u32, msg[0..4], 1);
+        std.mem.writeIntBig(u8, &msg[4], 1);
+        _ = try std.os.sendto(self.socket, &msg, 0, @ptrCast(&self.address.any), self.address.any.len);
+        log.debug("choke: '{any}'", .{self.address});
     }
 };

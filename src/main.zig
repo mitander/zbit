@@ -20,7 +20,6 @@ pub fn main() !void {
     defer client.deinit();
 
     for (client.tracker_manager.peers.items) |peer| {
-        _ = peer;
-        // peer.socket = try peer.connect();
+        try peer.download(info, client.peer_id);
     }
 }

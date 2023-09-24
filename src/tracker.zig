@@ -90,7 +90,7 @@ pub const Tracker = struct {
                 const peer_port = [2]u8{ peer_values[i + 4], peer_values[i + 5] };
                 const port = std.mem.readIntBig(u16, &peer_port);
                 const address = std.net.Address.initIp4(ip, port);
-                const peer = try Peer.init(address, ally, self);
+                const peer = try Peer.init(ally, address, self);
                 try addUniquePeer(&peers, peer);
             }
         } else {
@@ -100,7 +100,7 @@ pub const Tracker = struct {
                 const port = try zencode.mapLookup(peer_values.Map, "port", .Integer);
                 const casted_port: u16 = @intCast(port);
                 const address = try std.net.Address.parseIp(ip, casted_port);
-                const peer = try Peer.init(address, ally, self);
+                const peer = try Peer.init(ally, address, self);
                 try addUniquePeer(&peers, peer);
             }
         }

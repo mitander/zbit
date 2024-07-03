@@ -1,10 +1,17 @@
 .{
     .name = "zbit",
     .version = "0.0.1",
+
     .dependencies = .{
         .zencode = .{
-            .url = "https://github.com/mitander/zencode/archive/v0.1.0.tar.gz",
-            .hash = "1220a3858c0cd65b61784414df4ee9c71a4e242eccbf9595b2f8f907223f0aeaffda",
+            .url = "https://github.com/mitander/zencode/archive/v0.2.0.tar.gz",
+            .hash = "12204ba088f76f6b022960b148cf3a750e34d998afe251520bd174490c21bec022c5",
         },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
     },
 }

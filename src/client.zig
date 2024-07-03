@@ -23,10 +23,10 @@ pub const Client = struct {
 
     pub fn init(metainfo: MetaInfo, allocator: std.mem.Allocator) !Client {
         var arena = std.heap.ArenaAllocator.init(allocator);
-        var ally = arena.allocator();
+        const ally = arena.allocator();
         errdefer arena.deinit();
 
-        const peer_id = try generatePeerId(ally);
+        const peer_id = try new_peer_id(ally);
         const tracker_manager = try TrackerManager.init(metainfo, peer_id, ally);
 
         return Client{
@@ -46,12 +46,12 @@ pub const Client = struct {
     }
 };
 
-fn generatePeerId(allocator: std.mem.Allocator) ![20]u8 {
+fn new_peer_id(allocator: std.mem.Allocator) ![20]u8 {
     var peer_id: [20]u8 = undefined;
     var rand_buf: [12]u8 = undefined;
     std.crypto.random.bytes(&rand_buf);
-    var id = try std.fmt.allocPrint(allocator, "-ZB0100-{s}", .{rand_buf});
+    const id = try std.fmt.allocPrint(allocator, "-ZB0100-{s}", .{rand_buf});
     defer allocator.free(id);
-    std.mem.copy(u8, &peer_id, id);
+    std.mem.copyForwards(u8, &peer_id, id);
     return peer_id;
 }

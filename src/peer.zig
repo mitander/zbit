@@ -37,7 +37,7 @@ pub const Message = union(enum) {
 
 pub const Peer = struct {
     address: std.net.Address,
-    socket: std.os.socket_t,
+    socket: std.posix.socket_t,
     buffer: std.ArrayList(u8),
     tracker: Tracker,
     state: State,
@@ -46,8 +46,8 @@ pub const Peer = struct {
 
     const Self = @This();
     pub fn init(allocator: std.mem.Allocator, address: std.net.Address, tracker: Tracker) !Peer {
-        const sock_flags = std.os.SOCK.STREAM | std.os.SOCK.CLOEXEC;
-        const socket = try std.os.socket(address.any.family, sock_flags, std.os.IPPROTO.TCP);
+        const sock_flags = std.posix.SOCK.STREAM | std.posix.SOCK.CLOEXEC;
+        const socket = try std.posix.socket(address.any.family, sock_flags, std.posix.IPPROTO.TCP);
         errdefer std.os.closeSocket(socket);
         return Peer{
             .address = address,
@@ -75,7 +75,7 @@ pub const Peer = struct {
     fn connect(self: Self) !void {
         log.debug("connecting to peer '{any}", .{self.address});
         for (0..2) |retry| {
-            std.os.connect(self.socket, &self.address.any, self.address.getOsSockLen()) catch |err| {
+            std.posix.connect(self.socket, &self.address.any, self.address.getOsSockLen()) catch |err| {
                 switch (err) {
                     error.ConnectionTimedOut, error.ConnectionRefused => {
                         log.warn("connection failed to '{any}', retry {d} of 2", .{
@@ -95,13 +95,13 @@ pub const Peer = struct {
 
     fn sendHandshake(self: Self, metainfo: MetaInfo, peer_id: [20]u8) !void {
         const handshake_payload = "\x13BitTorrent protocol\x00\x00\x00\x00\x00\x00\x00\x00";
-        _ = try std.os.sendto(self.socket, handshake_payload, 0, @ptrCast(&self.address.any), self.address.any.len);
-        _ = try std.os.sendto(self.socket, metainfo.info_hash[0..], 0, @ptrCast(&self.address.any), self.address.any.len);
-        _ = try std.os.sendto(self.socket, peer_id[0..], 0, @ptrCast(&self.address.any), self.address.any.len);
+        _ = try std.posix.sendto(self.socket, handshake_payload, 0, @ptrCast(&self.address.any), self.address.any.len);
+        _ = try std.posix.sendto(self.socket, metainfo.info_hash[0..], 0, @ptrCast(&self.address.any), self.address.any.len);
+        _ = try std.posix.sendto(self.socket, peer_id[0..], 0, @ptrCast(&self.address.any), self.address.any.len);
 
         while (true) {
             var buf: [68]u8 = undefined;
-            const len = try std.os.read(self.socket, &buf);
+            const len = try std.posix.read(self.socket, &buf);
             if (len == 68) {
                 break;
             }
@@ -112,17 +112,17 @@ pub const Peer = struct {
 
     fn sendInterested(self: Self) !void {
         var msg: [5]u8 = undefined;
-        std.mem.writeIntBig(u32, msg[0..4], 1);
-        std.mem.writeIntBig(u8, &msg[4], 3);
-        _ = try std.os.sendto(self.socket, &msg, 0, @ptrCast(&self.address.any), self.address.any.len);
+        std.mem.writeInt(u32, msg[0..4], 1, .big);
+        std.mem.writeInt(u8, &msg[4], 3, .big);
+        _ = try std.posix.sendto(self.socket, &msg, 0, @ptrCast(&self.address.any), self.address.any.len);
         log.debug("interested: '{any}'", .{self.address});
     }
 
     fn sendChoke(self: Self) !void {
         var msg: [5]u8 = undefined;
-        std.mem.writeIntBig(u32, msg[0..4], 1);
-        std.mem.writeIntBig(u8, &msg[4], 1);
-        _ = try std.os.sendto(self.socket, &msg, 0, @ptrCast(&self.address.any), self.address.any.len);
+        std.mem.writeInt(u32, msg[0..4], 1, .big);
+        std.mem.writeInt(u8, &msg[4], 1, .big);
+        _ = try std.posix.sendto(self.socket, &msg, 0, @ptrCast(&self.address.any), self.address.any.len);
         log.debug("choke: '{any}'", .{self.address});
     }
 };

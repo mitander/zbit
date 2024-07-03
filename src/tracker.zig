@@ -14,7 +14,7 @@ pub const TrackerManager = struct {
 
     pub fn init(metainfo: MetaInfo, peer_id: [20]u8, allocator: std.mem.Allocator) !TrackerManager {
         var arena = std.heap.ArenaAllocator.init(allocator);
-        var ally = arena.allocator();
+        const ally = arena.allocator();
         errdefer arena.deinit();
 
         var trackers = std.ArrayList(Tracker).init(ally);
@@ -45,7 +45,7 @@ pub const TrackerManager = struct {
 
 pub const Tracker = struct {
     uri: std.Uri,
-    last_update: std.atomic.Atomic(i64),
+    last_update: std.atomic.Value(i64),
     ally: std.mem.Allocator,
 
     const Self = @This();
@@ -53,14 +53,14 @@ pub const Tracker = struct {
     pub fn init(uri: std.Uri, allocator: std.mem.Allocator) Tracker {
         return Tracker{
             .uri = uri,
-            .last_update = std.atomic.Atomic(i64).init(0),
+            .last_update = std.atomic.Value(i64).init(0),
             .ally = allocator,
         };
     }
 
     pub fn requestPeers(self: Self) ![]Peer {
         var arena = std.heap.ArenaAllocator.init(self.ally);
-        var ally = arena.allocator();
+        const ally = arena.allocator();
         errdefer arena.deinit();
 
         const bencode = try self.sendRequest(ally);
@@ -88,7 +88,7 @@ pub const Tracker = struct {
                     peer_values[i + 3],
                 };
                 const peer_port = [2]u8{ peer_values[i + 4], peer_values[i + 5] };
-                const port = std.mem.readIntBig(u16, &peer_port);
+                const port = std.mem.readInt(u16, &peer_port, .big);
                 const address = std.net.Address.initIp4(ip, port);
                 const peer = try Peer.init(ally, address, self);
                 try addUniquePeer(&peers, peer);
@@ -119,16 +119,16 @@ pub const Tracker = struct {
 
     fn sendRequest(self: Self, allocator: std.mem.Allocator) ![]const u8 {
         var arena = std.heap.ArenaAllocator.init(allocator);
-        var ally = arena.allocator();
+        const ally = arena.allocator();
         errdefer arena.deinit();
 
         var client = std.http.Client{ .allocator = ally };
-        var headers = std.http.Headers{ .allocator = ally };
         for (0..20) |retry| {
-            var request = try client.request(.GET, self.uri, headers, .{});
-            try request.start();
+            var buffer: [8096]u8 = undefined;
+            var request = try client.open(.GET, self.uri, .{ .server_header_buffer = &buffer });
+            try request.send();
             request.wait() catch {
-                std.time.sleep(500 * std.time.ms_per_s);
+                std.time.sleep(std.time.ns_per_s);
                 log.debug("peer request failed: retry {d} of 20", .{retry});
                 continue;
             };
@@ -139,7 +139,7 @@ pub const Tracker = struct {
 };
 
 fn parseUri(url: []const u8, peer_id: [20]u8, info_hash: [20]u8, total_len: usize, allocator: std.mem.Allocator) !std.Uri {
-    const escaped_hash = std.Uri.escapeString(allocator, &info_hash) catch unreachable;
+    const escaped_hash = info_hash;
     const request_fmt = "{s}?info_hash={s}&peer_id={s}&left={d}&port={d}&downloaded=0&uploaded=0&compact=1";
     const tracker_port = 6889;
 

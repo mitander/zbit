@@ -72,7 +72,7 @@ pub const MetaInfo = struct {
         for (0..num_hashes) |i| {
             const begin = i * hash_len;
             const end = (i + 1) * hash_len;
-            std.mem.copy(u8, &piece_hashes[i], pieces[begin..end]);
+            std.mem.copyForwards(u8, &piece_hashes[i], pieces[begin..end]);
         }
 
         var info_bencoded = std.ArrayList(u8).init(ally);
